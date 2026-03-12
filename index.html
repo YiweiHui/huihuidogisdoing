@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="default">
-    <meta name="apple-mobile-web-app-title" content="可爱惠惠狗">
+    <meta name="apple-mobile-web-app-title" content="惠惠狗">
     <link rel="apple-touch-icon" href="image111.jpeg">
     <title>惠惠狗在偷偷做什么！</title>
     
@@ -27,7 +27,7 @@
             padding-bottom: 50px;
         }
 
-        /* 超炫加载遮罩层 */
+        /* 动画加载层 */
         #loading-screen {
             position: fixed; top: 0; left: 0; width: 100%; height: 100%;
             background: #ffffff; display: flex; flex-direction: column;
@@ -41,14 +41,12 @@
         .header h1 { font-size: 26px; color: var(--primary-color); margin: 10px 0 5px; }
         .header p { color: #888; font-size: 14px; margin: 0; }
 
-        /* 网络状态小圆点 (视觉点缀 A) */
         .status-dot {
             display: inline-block; width: 8px; height: 8px;
-            background-color: #ccc; /* 默认灰色 */
-            border-radius: 50%; margin-left: 5px;
+            background-color: #ccc; border-radius: 50%; margin-left: 5px;
             transition: background-color 0.3s;
         }
-        .status-dot.online { background-color: #4CAF50; /* 在线绿色 */ }
+        .status-dot.online { background-color: #4CAF50; }
 
         .date-container { display: flex; justify-content: center; margin-bottom: 25px; }
         input[type="date"] {
@@ -117,7 +115,6 @@
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-app.js";
         import { getDatabase, ref, set, onValue } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-database.js";
 
-        // Yiwei 的配置
         const firebaseConfig = {
             apiKey: "AIzaSyCU__iZvv2-ywIWo1inzs2tjE2Yvu5P4Sg",
             authDomain: "huihuidog-6c160.firebaseapp.com",
@@ -135,12 +132,18 @@
         const container = document.getElementById('schedule-container');
         const statusDot = document.getElementById('status-dot');
 
-        // 初始化日期
-        const now = new Date();
-        datePicker.value = now.toISOString().split('T')[0];
+        // 修复日期：获取本地日期
+        function getTodayString() {
+            const now = new Date();
+            const year = now.getFullYear();
+            const month = String(now.getMonth() + 1).padStart(2, '0');
+            const day = String(now.getDate()).padStart(2, '0');
+            return `${year}-${month}-${day}`;
+        }
 
-        // 渲染 UI
-        function createScheduleUI() {
+        datePicker.value = getTodayString();
+
+        function createUI() {
             container.innerHTML = '';
             for(let i = 0; i < 24; i++) {
                 const slot = document.createElement('div');
@@ -148,49 +151,37 @@
                 slot.innerHTML = `<div class="time-label">${i.toString().padStart(2, '0')}:00</div>
                                   <input type="text" class="action-input" placeholder="惠惠狗在..." id="hour-${i}">`;
                 container.appendChild(slot);
-
                 const input = slot.querySelector('input');
                 input.addEventListener('change', (e) => {
                     set(ref(db, `huihui_diary/${datePicker.value}/${i}`), e.target.value);
-                    showToast();
+                    const toast = document.getElementById('toast');
+                    toast.style.opacity = '1';
+                    setTimeout(() => { toast.style.opacity = '0'; }, 1800);
                 });
             }
         }
 
-        // 监听云端数据
-        function listenToCloudData(date) {
+        function listen(date) {
             onValue(ref(db, `huihui_diary/${date}`), (snapshot) => {
                 const data = snapshot.val() || {};
                 for(let i = 0; i < 24; i++) {
                     const input = document.getElementById(`hour-${i}`);
                     if (document.activeElement !== input) input.value = data[i] || '';
                 }
-                // 成功获取数据后，将小圆点变绿 (视觉点缀 B)
                 statusDot.classList.add('online');
             });
         }
 
-        function showToast() {
-            const toast = document.getElementById('toast');
-            toast.style.opacity = '1';
-            setTimeout(() => { toast.style.opacity = '0'; }, 1800);
-        }
+        datePicker.addEventListener('change', () => { createUI(); listen(datePicker.value); });
 
-        datePicker.addEventListener('change', () => { 
-            createScheduleUI();
-            listenToCloudData(datePicker.value); 
-        });
+        createUI();
+        listen(datePicker.value);
 
-        // 启动核心逻辑
-        createScheduleUI();
-        listenToCloudData(datePicker.value);
-
-        // 关键：渲染完 UI 且尝试连接 Firebase 后，隐藏加载层
         window.addEventListener('load', () => {
             setTimeout(() => {
                 document.getElementById('loading-screen').style.opacity = '0'; 
                 setTimeout(() => document.getElementById('loading-screen').style.display='none', 500);
-            }, 500); // 稍微多留半秒，展示小狗抱抱图
+            }, 600);
         });
     </script>
 </body>
