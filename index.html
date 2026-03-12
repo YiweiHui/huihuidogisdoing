@@ -41,7 +41,6 @@
         .header h1 { font-size: 26px; color: var(--primary-color); margin: 10px 0 5px; }
         .header p { color: #888; font-size: 13px; margin: 0; }
 
-        /* 状态小点 */
         .status-dot {
             display: inline-block; width: 8px; height: 8px;
             background-color: #ccc; border-radius: 50%; margin-left: 5px;
@@ -66,17 +65,23 @@
         }
 
         .time-slot {
-            display: flex; align-items: center;
+            display: flex; align-items: flex-start; /* 改为顶部对齐 */
             padding: 15px 0; border-bottom: 1px dashed #eee;
         }
         .time-slot:last-child { border-bottom: none; }
-        .time-label { font-weight: bold; color: #666; width: 70px; flex-shrink: 0; }
+        .time-label { font-weight: bold; color: #666; width: 65px; flex-shrink: 0; margin-top: 12px; }
 
+        /* 多行自适应输入框样式 */
         .action-input {
             flex-grow: 1; border: none;
-            background: #f8f9fa; padding: 12px 18px;
+            background: #f8f9fa; padding: 12px 15px;
             border-radius: 12px; font-size: 16px; outline: none;
             transition: background 0.3s, box-shadow 0.3s;
+            resize: none; /* 禁止手动拖动大小 */
+            overflow: hidden; /* 隐藏滚动条 */
+            line-height: 1.5;
+            font-family: inherit;
+            min-height: 24px;
         }
         .action-input:focus { background: var(--accent-color); box-shadow: 0 0 0 2px rgba(255,154,158,0.2); }
 
@@ -132,13 +137,9 @@
         const container = document.getElementById('schedule-container');
         const statusDot = document.getElementById('status-dot');
 
-        // 强行锁定北京时间逻辑
         function getBeijingDateString() {
             const formatter = new Intl.DateTimeFormat('zh-CN', {
-                timeZone: 'Asia/Shanghai',
-                year: 'numeric',
-                month: '2-digit',
-                day: '2-digit'
+                timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit', day: '2-digit'
             });
             const parts = formatter.formatToParts(new Date());
             const dateObj = {};
@@ -146,20 +147,30 @@
             return `${dateObj.year}-${dateObj.month}-${dateObj.day}`;
         }
 
-        // 初始化日期
         datePicker.value = getBeijingDateString();
+
+        // 自动调整高度的函数
+        function autoResize(el) {
+            el.style.height = 'auto';
+            el.style.height = el.scrollHeight + 'px';
+        }
 
         function createUI() {
             container.innerHTML = '';
             for(let i = 0; i < 24; i++) {
                 const slot = document.createElement('div');
                 slot.className = 'time-slot';
+                // 改为 textarea
                 slot.innerHTML = `<div class="time-label">${i.toString().padStart(2, '0')}:00</div>
-                                  <input type="text" class="action-input" placeholder="惠惠狗在..." id="hour-${i}">`;
+                                  <textarea class="action-input" placeholder="惠惠狗在..." id="hour-${i}" rows="1"></textarea>`;
                 container.appendChild(slot);
                 
-                const input = slot.querySelector('input');
-                input.addEventListener('change', (e) => {
+                const textarea = slot.querySelector('textarea');
+                
+                // 输入时自动调高
+                textarea.addEventListener('input', () => autoResize(textarea));
+
+                textarea.addEventListener('change', (e) => {
                     set(ref(db, `huihui_diary/${datePicker.value}/${i}`), e.target.value);
                     showToast();
                 });
@@ -170,8 +181,11 @@
             onValue(ref(db, `huihui_diary/${date}`), (snapshot) => {
                 const data = snapshot.val() || {};
                 for(let i = 0; i < 24; i++) {
-                    const input = document.getElementById(`hour-${i}`);
-                    if (document.activeElement !== input) input.value = data[i] || '';
+                    const el = document.getElementById(`hour-${i}`);
+                    if (document.activeElement !== el) {
+                        el.value = data[i] || '';
+                        autoResize(el); // 加载数据后自动调整一次高度
+                    }
                 }
                 statusDot.classList.add('online');
             });
@@ -185,11 +199,9 @@
 
         datePicker.addEventListener('change', () => { createUI(); listen(datePicker.value); });
 
-        // 启动执行
         createUI();
         listen(datePicker.value);
 
-        // 动画控制
         window.addEventListener('load', () => {
             setTimeout(() => {
                 document.getElementById('loading-screen').style.opacity = '0'; 
