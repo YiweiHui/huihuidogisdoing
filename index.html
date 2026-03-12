@@ -65,22 +65,23 @@
 
         .time-slot {
             display: flex; align-items: flex-start;
-            padding: 12px 0; border-bottom: 1px dashed #eee;
+            padding: 14px 0; border-bottom: 1px dashed #eee;
         }
         .time-slot:last-child { border-bottom: none; }
-        .time-label { font-weight: bold; color: #666; width: 60px; flex-shrink: 0; margin-top: 8px; font-size: 14px; }
+        .time-label { font-weight: bold; color: #666; width: 60px; flex-shrink: 0; margin-top: 10px; font-size: 14px; }
 
         .action-input {
             flex-grow: 1; border: none;
             background: #f8f9fa; 
-            padding: 8px 12px; /* 减小了内边距 */
-            border-radius: 10px; font-size: 16px; outline: none;
+            padding: 10px 15px; /* 稍微增加了内边距让视觉更圆润 */
+            border-radius: 12px; font-size: 16px; outline: none;
             transition: background 0.3s, box-shadow 0.3s;
             resize: none; 
             overflow: hidden;
-            line-height: 1.4;
+            line-height: 1.5;
             font-family: inherit;
-            min-height: 1.4em; /* 关键：确保一行的高度 */
+            /* 核心改进：设置一个最小高度，防止变扁 */
+            min-height: 44px; 
             display: block;
             box-sizing: border-box;
         }
@@ -151,12 +152,9 @@
         datePicker.value = getBeijingDateString();
 
         function autoResize(el) {
-            el.style.height = 'auto';
-            // 只有当有文字时才调整高度，没文字保持一行
-            if (el.value) {
+            el.style.height = '44px'; // 先恢复到最小高度
+            if (el.scrollHeight > 44) {
                 el.style.height = el.scrollHeight + 'px';
-            } else {
-                el.style.height = '1.4em'; 
             }
         }
 
