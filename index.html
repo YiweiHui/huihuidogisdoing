@@ -3,11 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="default">
     <meta name="apple-mobile-web-app-title" content="惠惠狗日记">
-    
     <title>惠惠狗在偷偷做什么！</title>
     
     <style>
@@ -114,6 +112,16 @@
             opacity: 0;
             transition: opacity 0.3s;
             pointer-events: none;
+            z-index: 1000;
+        }
+        
+        .status-dot {
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            background-color: #4CAF50;
+            border-radius: 50%;
+            margin-left: 5px;
         }
     </style>
 </head>
@@ -121,25 +129,41 @@
 
     <div class="header">
         <h1>🐶 惠惠狗在偷偷做什么！</h1>
-        <p style="color: #888; font-size: 14px; margin: 0;">记录小狗的每日行踪</p>
+        <p style="color: #888; font-size: 14px; margin: 0;">所有人都在看着小狗 <span class="status-dot"></span></p>
     </div>
 
     <div class="date-container">
         <input type="date" id="date-picker">
     </div>
 
-    <div class="schedule-container" id="schedule-container">
-        </div>
+    <div class="schedule-container" id="schedule-container"></div>
 
-    <div class="toast" id="toast">已自动保存 🐾</div>
+    <div class="toast" id="toast">同步成功 ☁️🐾</div>
 
-    <script>
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-app.js";
+        import { getDatabase, ref, set, onValue } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-database.js";
+
+        // 已使用 Yiwei 的配置填入
+        const firebaseConfig = {
+            apiKey: "AIzaSyCU__iZvv2-ywIWo1inzs2tjE2Yvu5P4Sg",
+            authDomain: "huihuidog-6c160.firebaseapp.com",
+            projectId: "huihuidog-6c160",
+            storageBucket: "huihuidog-6c160.firebasestorage.app",
+            messagingSenderId: "59923454412",
+            appId: "1:59923454412:web:6c652d94b4d9a6085de569",
+            measurementId: "G-LJKZQ7TFZ6",
+            databaseURL: "https://huihuidog-6c160-default-rtdb.firebaseio.com" // 自动补全了 DB 地址
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const db = getDatabase(app);
+
         const datePicker = document.getElementById('date-picker');
         const container = document.getElementById('schedule-container');
         const toast = document.getElementById('toast');
         let toastTimeout;
 
-        // 获取当地时间的今天日期 (YYYY-MM-DD)
         function getLocalToday() {
             const now = new Date();
             const year = now.getFullYear();
@@ -148,20 +172,12 @@
             return `${year}-${month}-${day}`;
         }
 
-        // 初始化日期选择器为今天
         datePicker.value = getLocalToday();
 
-        // 加载指定日期的时间表
-        function loadSchedule(date) {
+        function createScheduleUI() {
             container.innerHTML = '';
-            // 从手机本地存储中读取数据
-            const data = JSON.parse(localStorage.getItem('huihui_dog_diary')) || {};
-            const dayData = data[date] || {};
-
-            // 循环生成 0 点 到 23 点
             for(let i = 0; i < 24; i++) {
                 const timeStr = `${i.toString().padStart(2, '0')}:00`;
-                
                 const slot = document.createElement('div');
                 slot.className = 'time-slot';
                 
@@ -173,11 +189,12 @@
                 input.type = 'text';
                 input.className = 'action-input';
                 input.placeholder = '惠惠狗在...';
-                input.value = dayData[i] || ''; // 填入已保存的数据
+                input.id = `input-hour-${i}`;
 
-                // 监听输入框失去焦点或按下回车的事件进行保存
                 input.addEventListener('change', (e) => {
-                    saveData(date, i, e.target.value);
+                    const date = datePicker.value;
+                    const dbRef = ref(db, `huihui_diary/${date}/${i}`);
+                    set(dbRef, e.target.value).then(() => showToast());
                 });
 
                 slot.appendChild(label);
@@ -186,34 +203,32 @@
             }
         }
 
-        // 保存数据到本地
-        function saveData(date, hour, action) {
-            const data = JSON.parse(localStorage.getItem('huihui_dog_diary')) || {};
-            if(!data[date]) {
-                data[date] = {};
-            }
-            data[date][hour] = action;
-            localStorage.setItem('huihui_dog_diary', JSON.stringify(data));
-            
-            showToast();
+        function listenToCloudData(date) {
+            const dateRef = ref(db, `huihui_diary/${date}`);
+            onValue(dateRef, (snapshot) => {
+                const data = snapshot.val() || {};
+                for(let i = 0; i < 24; i++) {
+                    const input = document.getElementById(`input-hour-${i}`);
+                    if (document.activeElement !== input) {
+                        input.value = data[i] || '';
+                    }
+                }
+            });
         }
 
-        // 提示保存成功
         function showToast() {
             toast.style.opacity = '1';
             clearTimeout(toastTimeout);
-            toastTimeout = setTimeout(() => {
-                toast.style.opacity = '0';
-            }, 1500);
+            toastTimeout = setTimeout(() => { toast.style.opacity = '0'; }, 1500);
         }
 
-        // 监听日期切换事件
         datePicker.addEventListener('change', (e) => {
-            loadSchedule(e.target.value);
+            createScheduleUI();
+            listenToCloudData(e.target.value);
         });
 
-        // 页面首次加载时渲染今天的时间表
-        loadSchedule(datePicker.value);
+        createScheduleUI();
+        listenToCloudData(datePicker.value);
     </script>
 </body>
 </html>
