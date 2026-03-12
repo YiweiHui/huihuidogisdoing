@@ -27,7 +27,6 @@
             padding-bottom: 50px;
         }
 
-        /* 加载动画层 */
         #loading-screen {
             position: fixed; top: 0; left: 0; width: 100%; height: 100%;
             background: #ffffff; display: flex; flex-direction: column;
@@ -61,27 +60,29 @@
             max-width: 500px; margin: 0 auto;
             background: var(--box-bg); border-radius: 20px;
             box-shadow: 0 6px 20px rgba(0,0,0,0.06);
-            padding: 15px 25px;
+            padding: 15px 20px;
         }
 
         .time-slot {
-            display: flex; align-items: flex-start; /* 改为顶部对齐 */
-            padding: 15px 0; border-bottom: 1px dashed #eee;
+            display: flex; align-items: flex-start;
+            padding: 12px 0; border-bottom: 1px dashed #eee;
         }
         .time-slot:last-child { border-bottom: none; }
-        .time-label { font-weight: bold; color: #666; width: 65px; flex-shrink: 0; margin-top: 12px; }
+        .time-label { font-weight: bold; color: #666; width: 60px; flex-shrink: 0; margin-top: 8px; font-size: 14px; }
 
-        /* 多行自适应输入框样式 */
         .action-input {
             flex-grow: 1; border: none;
-            background: #f8f9fa; padding: 12px 15px;
-            border-radius: 12px; font-size: 16px; outline: none;
+            background: #f8f9fa; 
+            padding: 8px 12px; /* 减小了内边距 */
+            border-radius: 10px; font-size: 16px; outline: none;
             transition: background 0.3s, box-shadow 0.3s;
-            resize: none; /* 禁止手动拖动大小 */
-            overflow: hidden; /* 隐藏滚动条 */
-            line-height: 1.5;
+            resize: none; 
+            overflow: hidden;
+            line-height: 1.4;
             font-family: inherit;
-            min-height: 24px;
+            min-height: 1.4em; /* 关键：确保一行的高度 */
+            display: block;
+            box-sizing: border-box;
         }
         .action-input:focus { background: var(--accent-color); box-shadow: 0 0 0 2px rgba(255,154,158,0.2); }
 
@@ -149,10 +150,14 @@
 
         datePicker.value = getBeijingDateString();
 
-        // 自动调整高度的函数
         function autoResize(el) {
             el.style.height = 'auto';
-            el.style.height = el.scrollHeight + 'px';
+            // 只有当有文字时才调整高度，没文字保持一行
+            if (el.value) {
+                el.style.height = el.scrollHeight + 'px';
+            } else {
+                el.style.height = '1.4em'; 
+            }
         }
 
         function createUI() {
@@ -160,19 +165,17 @@
             for(let i = 0; i < 24; i++) {
                 const slot = document.createElement('div');
                 slot.className = 'time-slot';
-                // 改为 textarea
                 slot.innerHTML = `<div class="time-label">${i.toString().padStart(2, '0')}:00</div>
                                   <textarea class="action-input" placeholder="惠惠狗在..." id="hour-${i}" rows="1"></textarea>`;
                 container.appendChild(slot);
                 
                 const textarea = slot.querySelector('textarea');
-                
-                // 输入时自动调高
                 textarea.addEventListener('input', () => autoResize(textarea));
-
                 textarea.addEventListener('change', (e) => {
                     set(ref(db, `huihui_diary/${datePicker.value}/${i}`), e.target.value);
-                    showToast();
+                    const toast = document.getElementById('toast');
+                    toast.style.opacity = '1';
+                    setTimeout(() => { toast.style.opacity = '0'; }, 1500);
                 });
             }
         }
@@ -184,17 +187,11 @@
                     const el = document.getElementById(`hour-${i}`);
                     if (document.activeElement !== el) {
                         el.value = data[i] || '';
-                        autoResize(el); // 加载数据后自动调整一次高度
+                        autoResize(el);
                     }
                 }
                 statusDot.classList.add('online');
             });
-        }
-
-        function showToast() {
-            const toast = document.getElementById('toast');
-            toast.style.opacity = '1';
-            setTimeout(() => { toast.style.opacity = '0'; }, 1500);
         }
 
         datePicker.addEventListener('change', () => { createUI(); listen(datePicker.value); });
