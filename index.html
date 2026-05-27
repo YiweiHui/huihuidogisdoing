@@ -159,6 +159,79 @@
         }
         .action-input:focus { background: var(--accent-color); box-shadow: 0 0 0 2px rgba(255,154,158,0.2); }
 
+
+        .save-modal {
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.72);
+            z-index: 9998;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 18px;
+            box-sizing: border-box;
+        }
+
+        .save-modal-box {
+            width: 100%;
+            max-width: 520px;
+            max-height: 92vh;
+            overflow: auto;
+            background: #fff;
+            border-radius: 22px;
+            padding: 16px;
+            text-align: center;
+            box-shadow: 0 10px 35px rgba(0,0,0,0.28);
+        }
+
+        .save-modal-box h2 {
+            color: var(--primary-color);
+            font-size: 20px;
+            margin: 6px 0 10px;
+        }
+
+        .save-modal-box p {
+            color: #777;
+            font-size: 14px;
+            line-height: 1.6;
+            margin: 8px 0 14px;
+        }
+
+        .save-modal-img {
+            width: 100%;
+            max-height: 62vh;
+            object-fit: contain;
+            border-radius: 16px;
+            background: #f8f8f8;
+            margin-bottom: 14px;
+        }
+
+        .save-modal-btn {
+            width: 100%;
+            border: none;
+            border-radius: 16px;
+            padding: 13px 16px;
+            font-size: 16px;
+            font-weight: 800;
+            color: #fff;
+            background: var(--primary-color);
+            font-family: inherit;
+            margin-top: 8px;
+        }
+
+        .save-modal-cancel {
+            width: 100%;
+            border: none;
+            border-radius: 16px;
+            padding: 12px 16px;
+            font-size: 15px;
+            font-weight: 700;
+            color: #666;
+            background: #f3f3f3;
+            font-family: inherit;
+            margin-top: 8px;
+        }
+
         .toast {
             position: fixed; bottom: 30px; left: 50%;
             transform: translateX(-50%); background: rgba(0, 0, 0, 0.75);
@@ -168,6 +241,28 @@
             white-space: nowrap;
         }
     </style>
+
+    <script>
+        // 防止任何 Firebase/Storage 脚本错误导致页面永远停在加载页
+        window.addEventListener('load', function () {
+            setTimeout(function () {
+                var loading = document.getElementById('loading-screen');
+                if (loading) {
+                    loading.style.opacity = '0';
+                    setTimeout(function () { loading.style.display = 'none'; }, 500);
+                }
+            }, 1500);
+        });
+
+        window.addEventListener('error', function (event) {
+            console.error('页面错误：', event.message, event.error);
+        });
+
+        window.addEventListener('unhandledrejection', function (event) {
+            console.error('异步错误：', event.reason);
+        });
+    </script>
+
 </head>
 <body>
 
@@ -186,7 +281,7 @@
             <button class="checkin-action-btn" id="like-delete-btn">删除本张并点赞（不错）</button>
             <button class="checkin-action-btn" id="dislike-delete-btn">删除本张并踩一脚（丑丑）</button>
         </div>
-        <div class="checkin-hint">每天北京时间 22:00–23:40 出现；每晚限制一张，检查后隐藏到明天。</div>
+        <div class="checkin-hint">打卡/上传限北京时间 23:00–次日 01:00；已上传后可检查到次日 23:00。</div>
     </div>
 
     <div class="header">
@@ -202,6 +297,17 @@
     </div>
 
     <div class="schedule-container" id="schedule-container"></div>
+
+    <div class="save-modal hidden" id="save-modal">
+        <div class="save-modal-box">
+            <h2>帅帅照片保存确认 💖</h2>
+            <p>请长按下面这张图片，选择“保存到照片/存储到照片”。保存完成后，再点下面按钮删除网站里的照片。</p>
+            <img id="save-modal-img" class="save-modal-img" alt="待保存的惠惠狗打卡照">
+            <button class="save-modal-btn" id="confirm-saved-btn">我已保存，删除网站照片</button>
+            <button class="save-modal-cancel" id="cancel-save-btn">先不删，我还没保存</button>
+        </div>
+    </div>
+
     <div class="toast" id="toast">同步成功 ☁️🐾</div>
 
     <script type="module">
@@ -237,6 +343,10 @@
         const saveCuteBtn = document.getElementById('save-cute-btn');
         const likeDeleteBtn = document.getElementById('like-delete-btn');
         const dislikeDeleteBtn = document.getElementById('dislike-delete-btn');
+        const saveModal = document.getElementById('save-modal');
+        const saveModalImg = document.getElementById('save-modal-img');
+        const confirmSavedBtn = document.getElementById('confirm-saved-btn');
+        const cancelSaveBtn = document.getElementById('cancel-save-btn');
 
         let currentCheckinData = null;
         let diaryUnsubscribe = null;
@@ -269,10 +379,37 @@
             return `${p.year}-${p.month}-${p.day}`;
         }
 
-        function isCheckinTimeNow() {
+        function getPreviousBeijingDateString() {
+            const now = new Date();
+            const bjMillis = now.getTime() + (8 * 60 + now.getTimezoneOffset()) * 60 * 1000;
+            const prevBjDate = new Date(bjMillis - 24 * 60 * 60 * 1000);
+
+            const year = prevBjDate.getUTCFullYear();
+            const month = String(prevBjDate.getUTCMonth() + 1).padStart(2, '0');
+            const day = String(prevBjDate.getUTCDate()).padStart(2, '0');
+
+            return `${year}-${month}-${day}`;
+        }
+
+        function getCheckinDateString() {
+            const p = getBeijingParts();
+            const hour = Number(p.hour);
+
+            // 23:00-23:59 算今天晚上的打卡；
+            // 00:00-01:00 算前一天晚上的打卡，避免跨午夜后照片和状态丢失。
+            if (hour < 1) {
+                return getPreviousBeijingDateString();
+            }
+
+            return getBeijingDateString();
+        }
+
+        function isCheckinUploadTimeNow() {
             const p = getBeijingParts();
             const minutes = Number(p.hour) * 60 + Number(p.minute);
-            return minutes >= 22 * 60 && minutes <= 23 * 60 + 40;
+
+            // 仅允许北京时间 23:00 到次日 01:00 上传/拍照
+            return minutes >= 23 * 60 || minutes <= 1 * 60;
         }
 
         datePicker.value = getBeijingDateString();
@@ -323,8 +460,18 @@
 
             const alreadyDone = data && data.status === 'completed';
             const hasPhoto = data && data.status === 'uploaded' && data.url;
+            const canUploadNow = isCheckinUploadTimeNow();
 
-            if (!isCheckinTimeNow() || alreadyDone) {
+            if (alreadyDone) {
+                checkinPanel.classList.add('hidden');
+                checkinActions.classList.add('hidden');
+                checkinPhoto.classList.add('hidden');
+                return;
+            }
+
+            // 没有照片时，只有 23:00-次日 01:00 显示“惠惠狗打卡”按钮。
+            // 有照片后，照片和“萌萌检查完毕”按钮会一直显示到次日 23:00。
+            if (!hasPhoto && !canUploadNow) {
                 checkinPanel.classList.add('hidden');
                 checkinActions.classList.add('hidden');
                 checkinPhoto.classList.add('hidden');
@@ -337,25 +484,72 @@
                 checkinPhoto.src = data.url;
                 checkinPhoto.classList.remove('hidden');
                 checkinMainBtn.textContent = '萌萌检查完毕';
+                checkinMainBtn.disabled = false;
             } else {
                 checkinPhoto.removeAttribute('src');
                 checkinPhoto.classList.add('hidden');
                 checkinActions.classList.add('hidden');
                 checkinMainBtn.textContent = '惠惠狗打卡';
+                checkinMainBtn.disabled = false;
             }
         }
 
         function listenCheckin() {
             if (checkinUnsubscribe) checkinUnsubscribe();
 
-            const today = getBeijingDateString();
+            const today = getCheckinDateString();
             checkinUnsubscribe = onValue(ref(db, `huihui_checkin/${today}`), (snapshot) => {
                 renderCheckin(snapshot.val());
             });
         }
 
+        function waitWithTimeout(promise, ms, message) {
+            return Promise.race([
+                promise,
+                new Promise((_, reject) => setTimeout(() => reject(new Error(message)), ms))
+            ]);
+        }
+
+        function compressImage(file, maxWidth = 1280, quality = 0.82) {
+            return new Promise((resolve, reject) => {
+                const img = new Image();
+                const reader = new FileReader();
+
+                reader.onload = () => {
+                    img.onload = () => {
+                        const scale = Math.min(1, maxWidth / img.width);
+                        const canvas = document.createElement('canvas');
+                        canvas.width = Math.round(img.width * scale);
+                        canvas.height = Math.round(img.height * scale);
+
+                        const ctx = canvas.getContext('2d');
+                        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+
+                        canvas.toBlob((blob) => {
+                            if (!blob) {
+                                reject(new Error('图片压缩失败'));
+                                return;
+                            }
+                            resolve(blob);
+                        }, 'image/jpeg', quality);
+                    };
+
+                    img.onerror = () => reject(new Error('图片读取失败，请换一张图片'));
+                    img.src = reader.result;
+                };
+
+                reader.onerror = () => reject(new Error('无法读取图片文件'));
+                reader.readAsDataURL(file);
+            });
+        }
+
         async function uploadCheckinPhoto(file) {
             if (!file) return;
+
+            if (!isCheckinUploadTimeNow()) {
+                showToast('打卡时间已过，明晚 23:00 再来 🐾');
+                return;
+            }
 
             if (!file.type.startsWith('image/')) {
                 showToast('只能上传图片哦 🐶');
@@ -363,16 +557,27 @@
             }
 
             checkinMainBtn.disabled = true;
-            checkinMainBtn.textContent = '上传中...';
+            checkinMainBtn.textContent = '压缩中...';
 
             try {
-                const today = getBeijingDateString();
-                const ext = (file.name.split('.').pop() || 'jpg').toLowerCase();
-                const path = `huihui_checkin/${today}/checkin.${ext}`;
+                const today = getCheckinDateString();
+                const compressedBlob = await compressImage(file);
+                const path = `huihui_checkin/${today}/checkin.jpg`;
                 const imgRef = storageRef(storage, path);
 
-                await uploadBytes(imgRef, file);
-                const url = await getDownloadURL(imgRef);
+                checkinMainBtn.textContent = '上传中...';
+
+                await waitWithTimeout(
+                    uploadBytes(imgRef, compressedBlob, { contentType: 'image/jpeg' }),
+                    20000,
+                    '上传超时，请检查网络或 Firebase Storage 设置'
+                );
+
+                const url = await waitWithTimeout(
+                    getDownloadURL(imgRef),
+                    10000,
+                    '获取图片链接超时'
+                );
 
                 await set(ref(db, `huihui_checkin/${today}`), {
                     status: 'uploaded',
@@ -384,7 +589,20 @@
                 showToast('打卡成功 📸🐾');
             } catch (err) {
                 console.error(err);
-                showToast('上传失败，请检查 Firebase Storage 权限');
+
+                let msg = err && err.message ? err.message : '上传失败';
+                if (String(err.code || '').includes('storage/unauthorized')) {
+                    msg = '上传失败：Firebase Storage 权限未开放';
+                }
+                if (String(err.code || '').includes('storage/bucket-not-found')) {
+                    msg = '上传失败：Firebase Storage 存储桶不存在';
+                }
+                if (String(err.code || '').includes('storage/canceled')) {
+                    msg = '上传已取消';
+                }
+
+                showToast(msg);
+                checkinMainBtn.textContent = '惠惠狗打卡';
             } finally {
                 checkinMainBtn.disabled = false;
             }
@@ -403,34 +621,72 @@
         function downloadPhoto(url) {
             const a = document.createElement('a');
             a.href = url;
-            a.download = `惠惠狗打卡-${getBeijingDateString()}.jpg`;
+            a.download = `惠惠狗打卡-${getCheckinDateString()}.jpg`;
             a.target = '_blank';
+            a.rel = 'noopener';
             document.body.appendChild(a);
             a.click();
             a.remove();
         }
 
         async function finishCheckin(action) {
-            const today = getBeijingDateString();
+            const today = getCheckinDateString();
 
-            if (action === 'save' && currentCheckinData && currentCheckinData.url) {
-                downloadPhoto(currentCheckinData.url);
+            try {
+                if (action === 'save' && currentCheckinData && currentCheckinData.url) {
+                    saveModalImg.src = currentCheckinData.url;
+                    saveModal.classList.remove('hidden');
+                    checkinActions.classList.add('hidden');
+                    showToast('请长按图片保存到相册');
+                    return;
+                }
+
+                await deletePhotoFromStorageIfNeeded();
+
+                await set(ref(db, `huihui_checkin/${today}`), {
+                    status: 'completed',
+                    action,
+                    photoDeleted: true,
+                    completedAt: new Date().toISOString()
+                });
+
+                checkinPanel.classList.add('hidden');
+
+                if (action === 'like') showToast('不错！已点赞并删除 👍');
+                if (action === 'dislike') showToast('丑丑！已踩一脚并删除 🐾');
+            } catch (err) {
+                console.error(err);
+                showToast(err && err.message ? err.message : '操作失败，请重试');
             }
+        }
 
-            await deletePhotoFromStorageIfNeeded();
+        async function confirmSavedAndDelete() {
+            const today = getCheckinDateString();
 
-            await set(ref(db, `huihui_checkin/${today}`), {
-                status: 'completed',
-                action,
-                photoDeleted: true,
-                completedAt: new Date().toISOString()
-            });
+            try {
+                confirmSavedBtn.disabled = true;
+                confirmSavedBtn.textContent = '删除中...';
 
-            checkinPanel.classList.add('hidden');
+                await deletePhotoFromStorageIfNeeded();
 
-            if (action === 'save') showToast('帅帅已保存，网站照片已删除 💖');
-            if (action === 'like') showToast('不错！已点赞并删除 👍');
-            if (action === 'dislike') showToast('丑丑！已踩一脚并删除 🐾');
+                await set(ref(db, `huihui_checkin/${today}`), {
+                    status: 'completed',
+                    action: 'save',
+                    photoDeleted: true,
+                    completedAt: new Date().toISOString(),
+                    deletedAt: new Date().toISOString()
+                });
+
+                saveModal.classList.add('hidden');
+                checkinPanel.classList.add('hidden');
+                showToast('帅帅已保存，网站照片已删除 💖');
+            } catch (err) {
+                console.error(err);
+                showToast(err && err.message ? err.message : '删除失败，请重试');
+            } finally {
+                confirmSavedBtn.disabled = false;
+                confirmSavedBtn.textContent = '我已保存，删除网站照片';
+            }
         }
 
         checkinMainBtn.addEventListener('click', () => {
@@ -438,6 +694,10 @@
             if (hasPhoto) {
                 checkinActions.classList.toggle('hidden');
             } else {
+                if (!isCheckinUploadTimeNow()) {
+                    showToast('现在不能打卡哦，23:00–01:00 再来 🐶');
+                    return;
+                }
                 checkinFile.click();
             }
         });
@@ -451,22 +711,40 @@
         saveCuteBtn.addEventListener('click', () => finishCheckin('save'));
         likeDeleteBtn.addEventListener('click', () => finishCheckin('like'));
         dislikeDeleteBtn.addEventListener('click', () => finishCheckin('dislike'));
+        confirmSavedBtn.addEventListener('click', confirmSavedAndDelete);
+        cancelSaveBtn.addEventListener('click', () => {
+            saveModal.classList.add('hidden');
+            showToast('没删除，照片还在网站上');
+        });
 
         datePicker.addEventListener('change', () => { createUI(); listen(datePicker.value); });
 
-        createUI();
-        listen(datePicker.value);
-        listenCheckin();
+        try {
+            createUI();
+            listen(datePicker.value);
 
-        setInterval(() => {
-            listenCheckin();
-            renderCheckin(currentCheckinData);
-        }, 60 * 1000);
+            try {
+                listenCheckin();
+                setInterval(() => {
+                    listenCheckin();
+                    renderCheckin(currentCheckinData);
+                }, 60 * 1000);
+            } catch (checkinErr) {
+                console.error('打卡功能启动失败，但日程同步继续：', checkinErr);
+                showToast('打卡功能暂时异常，日程同步正常');
+            }
+        } catch (err) {
+            console.error('页面启动失败：', err);
+            showToast('页面启动失败，请看 Console 错误');
+        }
 
         window.addEventListener('load', () => {
             setTimeout(() => {
-                document.getElementById('loading-screen').style.opacity = '0'; 
-                setTimeout(() => document.getElementById('loading-screen').style.display='none', 500);
+                const loading = document.getElementById('loading-screen');
+                if (loading) {
+                    loading.style.opacity = '0'; 
+                    setTimeout(() => loading.style.display='none', 500);
+                }
             }, 800);
         });
     </script>
