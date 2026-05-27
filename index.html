@@ -8,7 +8,7 @@
     <meta name="apple-mobile-web-app-title" content="惠惠狗">
     <link rel="apple-touch-icon" href="image111.jpeg">
     <title>惠惠狗在偷偷做什么！</title>
-    
+
     <style>
         :root {
             --primary-color: #ff9a9e;
@@ -35,6 +35,79 @@
         }
         .loader-img { width: 120px; height: 120px; border-radius: 25px; animation: pulse 1.5s infinite; }
         @keyframes pulse { 0% { transform: scale(0.95); } 50% { transform: scale(1.05); } 100% { transform: scale(0.95); } }
+
+        .hidden { display: none !important; }
+
+        .checkin-panel {
+            max-width: 500px;
+            margin: 0 auto 18px;
+            background: linear-gradient(135deg, #fff7f7, #ffffff);
+            border: 2px solid rgba(255, 154, 158, 0.35);
+            border-radius: 22px;
+            box-shadow: 0 8px 24px rgba(255,154,158,0.18);
+            padding: 14px;
+            text-align: center;
+        }
+
+        .checkin-title {
+            color: var(--primary-color);
+            font-weight: 800;
+            font-size: 17px;
+            margin-bottom: 10px;
+        }
+
+        .checkin-photo {
+            width: 100%;
+            max-height: 360px;
+            object-fit: contain;
+            border-radius: 18px;
+            background: #fff;
+            margin-bottom: 12px;
+            box-shadow: 0 4px 14px rgba(0,0,0,0.08);
+        }
+
+        .checkin-btn {
+            border: none;
+            border-radius: 999px;
+            padding: 12px 20px;
+            font-size: 16px;
+            font-weight: 800;
+            color: #fff;
+            background: var(--primary-color);
+            box-shadow: 0 5px 14px rgba(255,154,158,0.35);
+            font-family: inherit;
+            cursor: pointer;
+        }
+
+        .checkin-btn:disabled {
+            opacity: 0.65;
+            cursor: not-allowed;
+        }
+
+        .checkin-actions {
+            margin-top: 12px;
+            display: grid;
+            gap: 10px;
+        }
+
+        .checkin-action-btn {
+            border: none;
+            border-radius: 14px;
+            padding: 11px 14px;
+            font-size: 15px;
+            background: #fff0f0;
+            color: #555;
+            font-weight: 700;
+            font-family: inherit;
+            cursor: pointer;
+        }
+
+        .checkin-hint {
+            color: #999;
+            font-size: 12px;
+            margin-top: 9px;
+            line-height: 1.5;
+        }
 
         .header { text-align: center; margin-bottom: 25px; }
         .header h1 { font-size: 26px; color: var(--primary-color); margin: 10px 0 5px; }
@@ -73,14 +146,13 @@
         .action-input {
             flex-grow: 1; border: none;
             background: #f8f9fa; 
-            padding: 10px 15px; /* 稍微增加了内边距让视觉更圆润 */
+            padding: 10px 15px;
             border-radius: 12px; font-size: 16px; outline: none;
             transition: background 0.3s, box-shadow 0.3s;
             resize: none; 
             overflow: hidden;
             line-height: 1.5;
             font-family: inherit;
-            /* 核心改进：设置一个最小高度，防止变扁 */
             min-height: 44px; 
             display: block;
             box-sizing: border-box;
@@ -93,6 +165,7 @@
             color: white; padding: 12px 25px; border-radius: 25px;
             font-size: 15px; opacity: 0; transition: opacity 0.3s;
             pointer-events: none; z-index: 1000;
+            white-space: nowrap;
         }
     </style>
 </head>
@@ -101,6 +174,19 @@
     <div id="loading-screen">
         <img src="image111.jpeg" class="loader-img">
         <p style="color: #ff9a9e; margin-top: 15px; font-weight: bold; font-size: 18px;">正在同步北京时间...</p>
+    </div>
+
+    <div class="checkin-panel hidden" id="checkin-panel">
+        <div class="checkin-title">📸 惠惠狗今日晚间打卡</div>
+        <img id="checkin-photo" class="checkin-photo hidden" alt="惠惠狗今日打卡照">
+        <button class="checkin-btn" id="checkin-main-btn">惠惠狗打卡</button>
+        <input type="file" id="checkin-file" accept="image/*" capture="environment" class="hidden">
+        <div class="checkin-actions hidden" id="checkin-actions">
+            <button class="checkin-action-btn" id="save-cute-btn">保存到相册（帅帅）</button>
+            <button class="checkin-action-btn" id="like-delete-btn">删除本张并点赞（不错）</button>
+            <button class="checkin-action-btn" id="dislike-delete-btn">删除本张并踩一脚（丑丑）</button>
+        </div>
+        <div class="checkin-hint">每天北京时间 22:00–23:40 出现；每晚限制一张，检查后隐藏到明天。</div>
     </div>
 
     <div class="header">
@@ -120,7 +206,8 @@
 
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-app.js";
-        import { getDatabase, ref, set, onValue } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-database.js";
+        import { getDatabase, ref, set, onValue, remove } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-database.js";
+        import { getStorage, ref as storageRef, uploadBytes, getDownloadURL, deleteObject } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-storage.js";
 
         const firebaseConfig = {
             apiKey: "AIzaSyCU__iZvv2-ywIWo1inzs2tjE2Yvu5P4Sg",
@@ -135,24 +222,63 @@
 
         const app = initializeApp(firebaseConfig);
         const db = getDatabase(app);
+        const storage = getStorage(app);
+
         const datePicker = document.getElementById('date-picker');
         const container = document.getElementById('schedule-container');
         const statusDot = document.getElementById('status-dot');
+        const toast = document.getElementById('toast');
 
-        function getBeijingDateString() {
+        const checkinPanel = document.getElementById('checkin-panel');
+        const checkinPhoto = document.getElementById('checkin-photo');
+        const checkinMainBtn = document.getElementById('checkin-main-btn');
+        const checkinFile = document.getElementById('checkin-file');
+        const checkinActions = document.getElementById('checkin-actions');
+        const saveCuteBtn = document.getElementById('save-cute-btn');
+        const likeDeleteBtn = document.getElementById('like-delete-btn');
+        const dislikeDeleteBtn = document.getElementById('dislike-delete-btn');
+
+        let currentCheckinData = null;
+        let diaryUnsubscribe = null;
+        let checkinUnsubscribe = null;
+
+        function showToast(message) {
+            toast.textContent = message;
+            toast.style.opacity = '1';
+            setTimeout(() => { toast.style.opacity = '0'; }, 1500);
+        }
+
+        function getBeijingParts() {
             const formatter = new Intl.DateTimeFormat('zh-CN', {
-                timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit', day: '2-digit'
+                timeZone: 'Asia/Shanghai',
+                year: 'numeric',
+                month: '2-digit',
+                day: '2-digit',
+                hour: '2-digit',
+                minute: '2-digit',
+                hour12: false
             });
             const parts = formatter.formatToParts(new Date());
-            const dateObj = {};
-            parts.forEach(p => dateObj[p.type] = p.value);
-            return `${dateObj.year}-${dateObj.month}-${dateObj.day}`;
+            const obj = {};
+            parts.forEach(p => obj[p.type] = p.value);
+            return obj;
+        }
+
+        function getBeijingDateString() {
+            const p = getBeijingParts();
+            return `${p.year}-${p.month}-${p.day}`;
+        }
+
+        function isCheckinTimeNow() {
+            const p = getBeijingParts();
+            const minutes = Number(p.hour) * 60 + Number(p.minute);
+            return minutes >= 22 * 60 && minutes <= 23 * 60 + 40;
         }
 
         datePicker.value = getBeijingDateString();
 
         function autoResize(el) {
-            el.style.height = '44px'; // 先恢复到最小高度
+            el.style.height = '44px';
             if (el.scrollHeight > 44) {
                 el.style.height = el.scrollHeight + 'px';
             }
@@ -166,20 +292,20 @@
                 slot.innerHTML = `<div class="time-label">${i.toString().padStart(2, '0')}:00</div>
                                   <textarea class="action-input" placeholder="惠惠狗在..." id="hour-${i}" rows="1"></textarea>`;
                 container.appendChild(slot);
-                
+
                 const textarea = slot.querySelector('textarea');
                 textarea.addEventListener('input', () => autoResize(textarea));
                 textarea.addEventListener('change', (e) => {
                     set(ref(db, `huihui_diary/${datePicker.value}/${i}`), e.target.value);
-                    const toast = document.getElementById('toast');
-                    toast.style.opacity = '1';
-                    setTimeout(() => { toast.style.opacity = '0'; }, 1500);
+                    showToast('同步成功 ☁️🐾');
                 });
             }
         }
 
         function listen(date) {
-            onValue(ref(db, `huihui_diary/${date}`), (snapshot) => {
+            if (diaryUnsubscribe) diaryUnsubscribe();
+
+            diaryUnsubscribe = onValue(ref(db, `huihui_diary/${date}`), (snapshot) => {
                 const data = snapshot.val() || {};
                 for(let i = 0; i < 24; i++) {
                     const el = document.getElementById(`hour-${i}`);
@@ -192,10 +318,150 @@
             });
         }
 
+        function renderCheckin(data) {
+            currentCheckinData = data || null;
+
+            const alreadyDone = data && data.status === 'completed';
+            const hasPhoto = data && data.status === 'uploaded' && data.url;
+
+            if (!isCheckinTimeNow() || alreadyDone) {
+                checkinPanel.classList.add('hidden');
+                checkinActions.classList.add('hidden');
+                checkinPhoto.classList.add('hidden');
+                return;
+            }
+
+            checkinPanel.classList.remove('hidden');
+
+            if (hasPhoto) {
+                checkinPhoto.src = data.url;
+                checkinPhoto.classList.remove('hidden');
+                checkinMainBtn.textContent = '萌萌检查完毕';
+            } else {
+                checkinPhoto.removeAttribute('src');
+                checkinPhoto.classList.add('hidden');
+                checkinActions.classList.add('hidden');
+                checkinMainBtn.textContent = '惠惠狗打卡';
+            }
+        }
+
+        function listenCheckin() {
+            if (checkinUnsubscribe) checkinUnsubscribe();
+
+            const today = getBeijingDateString();
+            checkinUnsubscribe = onValue(ref(db, `huihui_checkin/${today}`), (snapshot) => {
+                renderCheckin(snapshot.val());
+            });
+        }
+
+        async function uploadCheckinPhoto(file) {
+            if (!file) return;
+
+            if (!file.type.startsWith('image/')) {
+                showToast('只能上传图片哦 🐶');
+                return;
+            }
+
+            checkinMainBtn.disabled = true;
+            checkinMainBtn.textContent = '上传中...';
+
+            try {
+                const today = getBeijingDateString();
+                const ext = (file.name.split('.').pop() || 'jpg').toLowerCase();
+                const path = `huihui_checkin/${today}/checkin.${ext}`;
+                const imgRef = storageRef(storage, path);
+
+                await uploadBytes(imgRef, file);
+                const url = await getDownloadURL(imgRef);
+
+                await set(ref(db, `huihui_checkin/${today}`), {
+                    status: 'uploaded',
+                    url,
+                    path,
+                    uploadedAt: new Date().toISOString()
+                });
+
+                showToast('打卡成功 📸🐾');
+            } catch (err) {
+                console.error(err);
+                showToast('上传失败，请检查 Firebase Storage 权限');
+            } finally {
+                checkinMainBtn.disabled = false;
+            }
+        }
+
+        async function deletePhotoFromStorageIfNeeded() {
+            if (currentCheckinData && currentCheckinData.path) {
+                try {
+                    await deleteObject(storageRef(storage, currentCheckinData.path));
+                } catch (err) {
+                    console.warn('Storage photo delete skipped/failed:', err);
+                }
+            }
+        }
+
+        function downloadPhoto(url) {
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `惠惠狗打卡-${getBeijingDateString()}.jpg`;
+            a.target = '_blank';
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+        }
+
+        async function finishCheckin(action) {
+            const today = getBeijingDateString();
+
+            if (action === 'save' && currentCheckinData && currentCheckinData.url) {
+                downloadPhoto(currentCheckinData.url);
+            }
+
+            await deletePhotoFromStorageIfNeeded();
+
+            await set(ref(db, `huihui_checkin/${today}`), {
+                status: 'completed',
+                action,
+                photoDeleted: true,
+                completedAt: new Date().toISOString()
+            });
+
+            checkinPanel.classList.add('hidden');
+
+            if (action === 'save') showToast('帅帅已保存，网站照片已删除 💖');
+            if (action === 'like') showToast('不错！已点赞并删除 👍');
+            if (action === 'dislike') showToast('丑丑！已踩一脚并删除 🐾');
+        }
+
+        checkinMainBtn.addEventListener('click', () => {
+            const hasPhoto = currentCheckinData && currentCheckinData.status === 'uploaded' && currentCheckinData.url;
+            if (hasPhoto) {
+                checkinActions.classList.toggle('hidden');
+            } else {
+                checkinFile.click();
+            }
+        });
+
+        checkinFile.addEventListener('change', (e) => {
+            const file = e.target.files && e.target.files[0];
+            uploadCheckinPhoto(file);
+            e.target.value = '';
+        });
+
+        saveCuteBtn.addEventListener('click', () => finishCheckin('save'));
+        likeDeleteBtn.addEventListener('click', () => finishCheckin('like'));
+        dislikeDeleteBtn.addEventListener('click', () => finishCheckin('dislike'));
+
         datePicker.addEventListener('change', () => { createUI(); listen(datePicker.value); });
 
         createUI();
         listen(datePicker.value);
+        listenCheckin();
+
+        setInterval(() => {
+            listenCheckin();
+            renderCheckin(currentCheckinData);
+        }, 60 * 1000);
 
         window.addEventListener('load', () => {
             setTimeout(() => {
