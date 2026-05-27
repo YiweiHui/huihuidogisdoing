@@ -281,7 +281,7 @@
             <button class="checkin-action-btn" id="like-delete-btn">删除本张并点赞（不错）</button>
             <button class="checkin-action-btn" id="dislike-delete-btn">删除本张并踩一脚（丑丑）</button>
         </div>
-        <div class="checkin-hint">打卡/上传限北京时间 23:00–次日 01:00；已上传后可检查到次日 23:00。</div>
+        <div class="checkin-hint">打卡/上传限北京时间 07:00–09:00；已上传后可检查到次日 06:59。</div>
     </div>
 
     <div class="header">
@@ -395,9 +395,9 @@
             const p = getBeijingParts();
             const hour = Number(p.hour);
 
-            // 23:00-23:59 算今天晚上的打卡；
-            // 00:00-01:00 算前一天晚上的打卡，避免跨午夜后照片和状态丢失。
-            if (hour < 1) {
+            // 07:00-23:59 算今天这轮打卡；
+            // 00:00-06:59 算前一天这轮打卡，避免跨午夜后照片和状态丢失。
+            if (hour < 7) {
                 return getPreviousBeijingDateString();
             }
 
@@ -408,8 +408,8 @@
             const p = getBeijingParts();
             const minutes = Number(p.hour) * 60 + Number(p.minute);
 
-            // 仅允许北京时间 23:00 到次日 01:00 上传/拍照
-            return minutes >= 23 * 60 || minutes <= 1 * 60;
+            // 仅允许北京时间 07:00 到 09:00 上传/拍照
+            return minutes >= 7 * 60 && minutes <= 9 * 60;
         }
 
         datePicker.value = getBeijingDateString();
@@ -547,7 +547,7 @@
             if (!file) return;
 
             if (!isCheckinUploadTimeNow()) {
-                showToast('打卡时间已过，明晚 23:00 再来 🐾');
+                showToast('打卡时间已过，明早 07:00 再来 🐾');
                 return;
             }
 
@@ -695,7 +695,7 @@
                 checkinActions.classList.toggle('hidden');
             } else {
                 if (!isCheckinUploadTimeNow()) {
-                    showToast('现在不能打卡哦，23:00–01:00 再来 🐶');
+                    showToast('现在不能打卡哦，07:00–09:00 再来 🐶');
                     return;
                 }
                 checkinFile.click();
